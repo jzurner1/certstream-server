@@ -1,13 +1,35 @@
-# Mix artifacts
-_build
-deps
+# Mix build artifacts
+_build/
+deps/
 *.ez
 
-# IDE shit
-.idea
+# Test coverage
+cover/
+
+# Documentation
+doc/
+
+# Development tools
+.elixir_ls/
+.idea/
 *.iml
+
+# Frontend source (only dist/ is needed at runtime)
+frontend/node_modules/
+frontend/src/
+frontend/build/
+frontend/config/
+frontend/.babelrc
+frontend/.editorconfig
+frontend/.eslintignore
+frontend/.eslintrc.js
+frontend/.postcssrc.js
+frontend/Makefile
+frontend/package.json
+frontend/package-lock.json
+frontend/index.html
+frontend/README.md
 
 # Misc
 README.md
-
-html/node_modules/
+.git/

@@ -1,24 +1,33 @@
-FROM elixir:1.8-alpine
+FROM elixir:1.17-alpine AS build
 
 WORKDIR /opt/app
 
-ENV HOME /opt/app
-ENV MIX_HOME=/opt/mix
-ENV HEX_HOME=/opt/hex
-ENV MIX_ENV=prod
+ENV HOME=/opt/app \
+    MIX_HOME=/opt/mix \
+    HEX_HOME=/opt/hex \
+    MIX_ENV=prod
 
-RUN apk add git
+RUN apk add --no-cache git build-base
 
 RUN mix local.hex --force && mix local.rebar --force
 
-ADD mix.exs ./
-ADD mix.lock ./
+# Copy dependency manifests first for better layer caching
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only prod
+RUN mix deps.compile
 
-RUN mix do deps.get, deps.compile
+# Copy pre-built frontend assets
+COPY frontend/dist/ ./frontend/dist/
 
-COPY frontend/dist/ /opt/app/frontend/dist/
-COPY config/ /opt/app/config/
+# Copy application source
+COPY config/ ./config/
+COPY lib/ ./lib/
 
-COPY lib /opt/app/lib/
+RUN mix compile
 
-CMD mix run --no-halt
+EXPOSE 4000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD wget -qO- http://localhost:4000/latest.json > /dev/null 2>&1 || exit 1
+
+CMD ["mix", "run", "--no-halt"]

@@ -1,0 +1,25 @@
+services:
+  certstream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      PORT: "4000"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      MIX_ENV: "prod"
+      # optional: set HONEYBADGER_API_KEY to enable error reporting
+      HONEYBADGER_API_KEY: "${HONEYBADGER_API_KEY:-}"
+      # optional: point to a statsd server for metrics
+      STATSD_HOST: "${STATSD_HOST:-localhost}"
+      STATSD_PORT: "${STATSD_PORT:-8125}"
+      # optional: override the stats URL (default: /stats)
+      STATS_URL: "${STATS_URL:-stats}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/latest.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
