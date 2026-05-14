@@ -101,31 +101,29 @@ defmodule Certstream.CTWatcher do
     # On first run attempt to fetch 512 certificates, and see what the API returns. However
     # many certs come back is what we should use as the batch size moving forward (at least
     # in theory).
+    try do
+      batch_size = "#{state[:url]}ct/v1/get-entries?start=0&end=511"
+                     |> HTTPoison.get!([], @default_http_options)
+                     |> Map.get(:body)
+                     |> Jason.decode!
+                     |> Map.get("entries")
+                     |> Enum.count
 
-    state =
-      try do
-        batch_size = "#{state[:url]}ct/v1/get-entries?start=0&end=511"
-                       |> HTTPoison.get!([], @default_http_options)
-                       |> Map.get(:body)
-                       |> Jason.decode!
-                       |> Map.get("entries")
-                       |> Enum.count
+      Logger.info("Worker #{inspect self()} with url #{state[:url]} found batch size of #{batch_size}.")
 
-        Logger.info("Worker #{inspect self()} with url #{state[:url]} found batch size of #{batch_size}.")
+      state = Map.put(state, :batch_size, batch_size)
 
-        state = Map.put(state, :batch_size, batch_size)
+      # On first run populate the state[:tree_size] key
+      state = Map.put(state, :tree_size, get_tree_size(state))
 
-        # On first run populate the state[:tree_size] key
-        state = Map.put(state, :tree_size, get_tree_size(state))
+      send(self(), :update)
 
-        send(self(), :update)
-
-        state
-      rescue e ->
-        Logger.warn("Worker #{inspect self()} with state #{inspect state} blew up because #{inspect e}")
-      end
-
-    {:noreply, state}
+      {:noreply, state}
+    rescue e ->
+      Logger.warning("Worker #{inspect self()} with url #{state[:url]} failed to initialize: #{inspect e}. Retrying in 30 seconds.")
+      Process.send_after(self(), :init, :timer.seconds(30))
+      {:noreply, state}
+    end
   end
 
   def handle_info(:update, state) do
