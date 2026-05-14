@@ -10,6 +10,8 @@ defmodule Certstream.CTWatcher do
   use Instruments
 
   @default_http_options [timeout: 10_000, recv_timeout: 10_000, ssl: [{:versions, [:'tlsv1.2']}], follow_redirect: true]
+  @max_retries 8
+  @max_backoff_ms 30_000
 
   def child_spec(log) do
     %{
@@ -63,26 +65,34 @@ defmodule Certstream.CTWatcher do
     {:ok, state}
   end
 
-  def http_request_with_retries(full_url, options \\ @default_http_options) do
-    # Go ask for the first 512 entries
-    Logger.info("Sending GET request to #{full_url}")
+  def http_request_with_retries(full_url, options \\ @default_http_options, retry_count \\ 0) do
+    Logger.debug(fn -> "Sending GET request to #{full_url} (attempt #{retry_count + 1})" end)
 
     user_agent = {"User-Agent", user_agent()}
 
-    case HTTPoison.get(full_url, [user_agent], options) do
+    result = HTTPoison.get(full_url, [user_agent], options)
+
+    case result do
       {:ok, %HTTPoison.Response{status_code: 200} = response} ->
-        response.body
-          |> Jason.decode!
+        response.body |> Jason.decode!
+
+      {:ok, response} when retry_count < @max_retries ->
+        backoff = min(trunc(:math.pow(2, retry_count)) * 1_000, @max_backoff_ms)
+        Logger.error("Unexpected status code #{response.status_code} fetching #{full_url}. Retrying in #{backoff}ms (attempt #{retry_count + 1}/#{@max_retries})...")
+        :timer.sleep(backoff)
+        http_request_with_retries(full_url, options, retry_count + 1)
+
+      {:error, %HTTPoison.Error{reason: reason}} when retry_count < @max_retries ->
+        backoff = min(trunc(:math.pow(2, retry_count)) * 1_000, @max_backoff_ms)
+        Logger.error("Error #{inspect reason} fetching #{full_url}. Retrying in #{backoff}ms (attempt #{retry_count + 1}/#{@max_retries})...")
+        :timer.sleep(backoff)
+        http_request_with_retries(full_url, options, retry_count + 1)
 
       {:ok, response} ->
-        Logger.error("Unexpected status code #{response.status_code} fetching url #{full_url}! Sleeping for a bit and trying again...")
-        :timer.sleep(:timer.seconds(10))
-        http_request_with_retries(full_url, options)
+        raise "Max retries exceeded for #{full_url}: HTTP #{response.status_code}"
 
       {:error, %HTTPoison.Error{reason: reason}} ->
-        Logger.error("Error: #{inspect reason} while GETing #{full_url}! Sleeping for 10 seconds and trying again...")
-        :timer.sleep(:timer.seconds(10))
-        http_request_with_retries(full_url, options)
+        raise "Max retries exceeded for #{full_url}: #{inspect reason}"
     end
   end
 
