@@ -1,6 +1,6 @@
 # CertStream Server
 
-Aggregates and broadcasts SSL certificates as they're issued live, by watching Certificate Transparency logs.
+Aggregates and broadcasts SSL certificates as they're issued live by watching Certificate Transparency logs. Provides a simple Docker container to easily set up your own server. Updated for slightly more resiliance and ease-of-use.
 
 ## Setup (Docker — recommended)
 
