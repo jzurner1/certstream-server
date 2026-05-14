@@ -79,7 +79,7 @@ defmodule Certstream.WebsocketServer do
       res = :cowboy_req.reply(
         200,
         %{'content-type' => 'text/html'},
-        File.read!("frontend/dist/index.html"),
+        :persistent_term.get(:index_html),
         req
       )
       {:ok, res, state}
@@ -110,7 +110,7 @@ defmodule Certstream.WebsocketServer do
   def websocket_info({:mail, box_pid, serialized_certificates, _message_count, message_drop_count}, state) do
     if message_drop_count > 0 do
       Instruments.increment("certstream.dropped_messages", message_drop_count, tags: ["ip:#{state[:ip_address]}"])
-      Logger.warn("Message drop count greater than 0 -> #{message_drop_count}")
+      Logger.warning("Message drop count greater than 0 -> #{message_drop_count}")
     end
 
     Logger.debug(fn -> "Sending client #{length(serialized_certificates |> List.flatten)} client frames" end)
@@ -133,6 +133,7 @@ defmodule Certstream.WebsocketServer do
   end
 
   def start_link(_opts) do
+    :persistent_term.put(:index_html, File.read!("frontend/dist/index.html"))
     Logger.info("Starting web server on port #{get_port()}...")
     :cowboy.start_clear(
       :websocket_server,
@@ -148,7 +149,7 @@ defmodule Certstream.WebsocketServer do
                 {"/example.json", __MODULE__, [:example_json]},
                 {"/latest.json", __MODULE__, [:latest_json]},
                 {"/static/[...]", :cowboy_static, {:dir, "frontend/dist/static/"}},
-                {"/#{System.get_env(~s(STATS_URL)) || 'stats'}", __MODULE__, [:stats]}
+                {"/#{System.get_env("STATS_URL") || "stats"}", __MODULE__, [:stats]}
               ]}
           ])
         },

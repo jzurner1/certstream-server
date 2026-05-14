@@ -9,7 +9,7 @@ defmodule Certstream.CTWatcher do
   use GenServer
   use Instruments
 
-  @default_http_options [timeout: 10_000, recv_timeout: 10_000, ssl: [{:versions, [:'tlsv1.2']}], follow_redirect: true]
+  @default_http_options [timeout: 10_000, recv_timeout: 10_000, ssl: [{:versions, [:'tlsv1.3', :'tlsv1.2']}], follow_redirect: true]
   @max_retries 8
   @max_backoff_ms 30_000
 
@@ -23,11 +23,8 @@ defmodule Certstream.CTWatcher do
 
   def start_and_link_watchers(name: supervisor_name) do
     Logger.info("Initializing CT Watchers...")
-    # Fetch all CT lists
     ctl_log_info = "https://www.gstatic.com/ct/log_list/v3/all_logs_list.json"
-                     |> HTTPoison.get!([], @default_http_options)
-                     |> Map.get(:body)
-                     |> Jason.decode!
+                     |> http_request_with_retries()
 
 
     ctl_log_info
@@ -173,7 +170,7 @@ defmodule Certstream.CTWatcher do
       |> Enum.chunk_every(state[:batch_size])
       # Use Task.async_stream to have 5 concurrent requests to the CT server to fetch
       # our certificates without waiting on the previous chunk.
-      |> Task.async_stream(&(fetch_and_broadcast_certs(&1, state)), max_concurrency: 5, timeout: :timer.seconds(600))
+      |> Task.async_stream(&(fetch_and_broadcast_certs(&1, state)), max_concurrency: 5, timeout: :timer.seconds(60))
       |> Enum.to_list # Nop to just pull the requests through async_stream
   end
 
